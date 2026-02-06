@@ -19,10 +19,22 @@
  * @param apiProfileEnv - Environment variables from getAPIProfileEnv()
  * @returns Object with empty ANTHROPIC_* vars if in OAuth mode, empty object otherwise
  */
-export function getOAuthModeClearVars(apiProfileEnv: Record<string, string>): Record<string, string> {
+export function getOAuthModeClearVars(apiProfileEnv: Record<string, string>, autoBuildEnv?: Record<string, string>): Record<string, string> {
   // If API profile is active (has ANTHROPIC_* vars), don't clear anything
   if (apiProfileEnv && Object.keys(apiProfileEnv).some(key => key.startsWith('ANTHROPIC_'))) {
     return {};
+  }
+
+  // If Vertex AI mode is enabled, don't clear ANTHROPIC_* vars — the backend
+  // manages its own ANTHROPIC_BASE_URL for Vertex AI endpoints.
+  // Only checks the explicitly passed autoBuildEnv (not process.env) to keep
+  // this function pure and testable.
+  if (autoBuildEnv) {
+    const vertexKeys = ['USE_VERTEX_AI', 'CLAUDE_CODE_USE_VERTEX'];
+    for (const key of vertexKeys) {
+      const envVal = autoBuildEnv[key]?.toLowerCase();
+      if (envVal === 'true' || envVal === '1') return {};
+    }
   }
 
   // In OAuth mode (no API profile), clear all ANTHROPIC_* vars

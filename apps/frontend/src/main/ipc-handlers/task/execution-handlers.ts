@@ -9,6 +9,8 @@ import { AgentManager } from '../../agent';
 import { fileWatcher } from '../../file-watcher';
 import { findTaskAndProject } from './shared';
 import { checkGitStatus } from '../../project-initializer';
+import { parseEnvFile } from '../utils';
+import { getEffectiveSourcePath } from '../../updater/path-resolver';
 import { initializeClaudeProfileManager, type ClaudeProfileManager } from '../../claude-profile-manager';
 import { taskStateManager } from '../../task-state-manager';
 import {
@@ -55,6 +57,37 @@ function safeReadFileSync(filePath: string): string | null {
     }
     return null;
   }
+}
+
+/**
+ * Check if Vertex AI mode is enabled via process.env or backend .env file.
+ * When enabled, OAuth authentication is not required — the backend uses
+ * Google Cloud ADC for authentication instead.
+ */
+function isVertexAIEnabled(): boolean {
+  // Check process.env first (shell environment)
+  for (const key of ['USE_VERTEX_AI', 'CLAUDE_CODE_USE_VERTEX']) {
+    const val = process.env[key]?.toLowerCase();
+    if (val === 'true' || val === '1') return true;
+  }
+
+  // Check backend source .env file (where Vertex AI config lives)
+  try {
+    const sourcePath = getEffectiveSourcePath();
+    const envPath = path.join(sourcePath, '.env');
+    const content = safeReadFileSync(envPath);
+    if (content) {
+      const vars = parseEnvFile(content);
+      for (const key of ['USE_VERTEX_AI', 'CLAUDE_CODE_USE_VERTEX']) {
+        const val = vars[key]?.toLowerCase();
+        if (val === 'true' || val === '1') return true;
+      }
+    }
+  } catch {
+    // Ignore errors reading .env
+  }
+
+  return false;
 }
 
 /**
@@ -168,7 +201,8 @@ export function registerTaskExecutionHandlers(
       }
 
       // Check authentication - Claude requires valid auth to run tasks
-      if (!profileManager.hasValidAuth()) {
+      // Skip OAuth check if Vertex AI mode is enabled (uses Google Cloud ADC instead)
+      if (!isVertexAIEnabled() && !profileManager.hasValidAuth()) {
         console.warn('[TASK_START] No valid authentication for active profile');
         mainWindow.webContents.send(
           IPC_CHANNELS.TASK_ERROR,
@@ -686,29 +720,35 @@ export function registerTaskExecutionHandlers(
           }
 
           // Check authentication before auto-starting
-          // Ensure profile manager is initialized to prevent race condition
-          const initResult = await ensureProfileManagerInitialized();
-          if (!initResult.success) {
-            if (mainWindow) {
-              mainWindow.webContents.send(
-                IPC_CHANNELS.TASK_ERROR,
-                taskId,
-                initResult.error
-              );
+          // Skip OAuth check if Vertex AI mode is enabled (uses Google Cloud ADC instead)
+          const vertexEnabled = isVertexAIEnabled();
+          if (!vertexEnabled) {
+            // Ensure profile manager is initialized to prevent race condition
+            const initResult = await ensureProfileManagerInitialized();
+            if (!initResult.success) {
+              if (mainWindow) {
+                mainWindow.webContents.send(
+                  IPC_CHANNELS.TASK_ERROR,
+                  taskId,
+                  initResult.error
+                );
+              }
+              return { success: false, error: initResult.error };
             }
-            return { success: false, error: initResult.error };
-          }
-          const profileManager = initResult.profileManager;
-          if (!profileManager.hasValidAuth()) {
-            console.warn('[TASK_UPDATE_STATUS] No valid authentication for active profile');
-            if (mainWindow) {
-              mainWindow.webContents.send(
-                IPC_CHANNELS.TASK_ERROR,
-                taskId,
-                'Claude authentication required. Please go to Settings > Claude Profiles and authenticate your account, or set an OAuth token.'
-              );
+            const profileManager = initResult.profileManager;
+            if (!profileManager.hasValidAuth()) {
+              console.warn('[TASK_UPDATE_STATUS] No valid authentication for active profile');
+              if (mainWindow) {
+                mainWindow.webContents.send(
+                  IPC_CHANNELS.TASK_ERROR,
+                  taskId,
+                  'Claude authentication required. Please go to Settings > Claude Profiles and authenticate your account, or set an OAuth token.'
+                );
+              }
+              return { success: false, error: 'Claude authentication required' };
             }
-            return { success: false, error: 'Claude authentication required' };
+          } else {
+            console.warn('[TASK_UPDATE_STATUS] Vertex AI mode enabled, skipping OAuth check');
           }
 
           console.warn('[TASK_UPDATE_STATUS] Auto-starting task:', taskId);
@@ -1125,7 +1165,7 @@ export function registerTaskExecutionHandlers(
             };
           }
           const profileManager = initResult.profileManager;
-          if (!profileManager.hasValidAuth()) {
+          if (!isVertexAIEnabled() && !profileManager.hasValidAuth()) {
             console.warn('[Recovery] Auth check failed, cannot auto-restart task');
             // Recovery succeeded but we can't restart without auth
             return {

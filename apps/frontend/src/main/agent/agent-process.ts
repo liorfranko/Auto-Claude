@@ -308,6 +308,15 @@ export class AgentProcessManager {
 
   private handleAuthFailure(taskId: string, allOutput: string): boolean {
     console.log('[AgentProcess] No rate limit detected - checking for auth failure');
+
+    // Skip auth failure detection when Vertex AI is enabled — Vertex AI uses
+    // Google Cloud ADC instead of OAuth, so auth failure patterns from Claude
+    // OAuth checks are irrelevant and would cause false positives.
+    if (this.isVertexAIEnabled()) {
+      console.log('[AgentProcess] Vertex AI mode enabled, skipping OAuth auth failure detection');
+      return false;
+    }
+
     const authFailureDetection = detectAuthFailure(allOutput);
 
     if (!authFailureDetection.isAuthFailure) {
@@ -572,6 +581,22 @@ export class AgentProcessManager {
   }
 
   /**
+   * Check if Vertex AI mode is enabled via process.env or backend .env file.
+   */
+  private isVertexAIEnabled(): boolean {
+    for (const key of ['USE_VERTEX_AI', 'CLAUDE_CODE_USE_VERTEX']) {
+      const val = process.env[key]?.toLowerCase();
+      if (val === 'true' || val === '1') return true;
+    }
+    const envVars = this.loadAutoBuildEnv();
+    for (const key of ['USE_VERTEX_AI', 'CLAUDE_CODE_USE_VERTEX']) {
+      const val = envVars[key]?.toLowerCase();
+      if (val === 'true' || val === '1') return true;
+    }
+    return false;
+  }
+
+  /**
    * Spawn a Python process for task execution
    */
   async spawnProcess(
@@ -613,7 +638,8 @@ export class AgentProcessManager {
     }
 
     // Get OAuth mode clearing vars (clears stale ANTHROPIC_* vars when in OAuth mode)
-    const oauthModeClearVars = getOAuthModeClearVars(apiProfileEnv);
+    // Pass autoBuildEnv so Vertex AI mode can be detected and skip clearing
+    const oauthModeClearVars = getOAuthModeClearVars(apiProfileEnv, this.loadAutoBuildEnv());
 
     // Parse Python commandto handle space-separated commands like "py -3"
     const [pythonCommand, pythonBaseArgs] = parsePythonCommand(this.getPythonPath());

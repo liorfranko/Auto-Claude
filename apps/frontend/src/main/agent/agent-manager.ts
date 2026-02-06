@@ -16,6 +16,22 @@ import {
 import type { IdeationConfig } from '../../shared/types';
 
 /**
+ * Check if Vertex AI mode is enabled via process.env or a parsed env vars object.
+ * When enabled, OAuth authentication is not required.
+ */
+function isVertexAIEnabled(envVars?: Record<string, string>): boolean {
+  for (const key of ['USE_VERTEX_AI', 'CLAUDE_CODE_USE_VERTEX']) {
+    const processVal = process.env[key]?.toLowerCase();
+    if (processVal === 'true' || processVal === '1') return true;
+    if (envVars) {
+      const envVal = envVars[key]?.toLowerCase();
+      if (envVal === 'true' || envVal === '1') return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Main AgentManager - orchestrates agent process lifecycle
  * This is a slim facade that delegates to focused modules
  */
@@ -156,18 +172,21 @@ export class AgentManager extends EventEmitter {
     projectId?: string
   ): Promise<void> {
     // Pre-flight auth check: Verify active profile has valid authentication
-    // Ensure profile manager is initialized to prevent race condition
-    let profileManager: ClaudeProfileManager;
-    try {
-      profileManager = await initializeClaudeProfileManager();
-    } catch (error) {
-      console.error('[AgentManager] Failed to initialize profile manager:', error);
-      this.emit('error', taskId, 'Failed to initialize profile manager. Please check file permissions and disk space.');
-      return;
-    }
-    if (!profileManager.hasValidAuth()) {
-      this.emit('error', taskId, 'Claude authentication required. Please authenticate in Settings > Claude Profiles before starting tasks.');
-      return;
+    // Skip OAuth check if Vertex AI mode is enabled (uses Google Cloud ADC instead)
+    if (!isVertexAIEnabled(this.processManager.loadAutoBuildEnv())) {
+      // Ensure profile manager is initialized to prevent race condition
+      let profileManager: ClaudeProfileManager;
+      try {
+        profileManager = await initializeClaudeProfileManager();
+      } catch (error) {
+        console.error('[AgentManager] Failed to initialize profile manager:', error);
+        this.emit('error', taskId, 'Failed to initialize profile manager. Please check file permissions and disk space.');
+        return;
+      }
+      if (!profileManager.hasValidAuth()) {
+        this.emit('error', taskId, 'Claude authentication required. Please authenticate in Settings > Claude Profiles before starting tasks.');
+        return;
+      }
     }
 
     // Ensure Python environment is ready before spawning process (prevents exit code 127 race condition)
@@ -253,18 +272,21 @@ export class AgentManager extends EventEmitter {
     projectId?: string
   ): Promise<void> {
     // Pre-flight auth check: Verify active profile has valid authentication
-    // Ensure profile manager is initialized to prevent race condition
-    let profileManager: ClaudeProfileManager;
-    try {
-      profileManager = await initializeClaudeProfileManager();
-    } catch (error) {
-      console.error('[AgentManager] Failed to initialize profile manager:', error);
-      this.emit('error', taskId, 'Failed to initialize profile manager. Please check file permissions and disk space.');
-      return;
-    }
-    if (!profileManager.hasValidAuth()) {
-      this.emit('error', taskId, 'Claude authentication required. Please authenticate in Settings > Claude Profiles before starting tasks.');
-      return;
+    // Skip OAuth check if Vertex AI mode is enabled (uses Google Cloud ADC instead)
+    if (!isVertexAIEnabled(this.processManager.loadAutoBuildEnv())) {
+      // Ensure profile manager is initialized to prevent race condition
+      let profileManager: ClaudeProfileManager;
+      try {
+        profileManager = await initializeClaudeProfileManager();
+      } catch (error) {
+        console.error('[AgentManager] Failed to initialize profile manager:', error);
+        this.emit('error', taskId, 'Failed to initialize profile manager. Please check file permissions and disk space.');
+        return;
+      }
+      if (!profileManager.hasValidAuth()) {
+        this.emit('error', taskId, 'Claude authentication required. Please authenticate in Settings > Claude Profiles before starting tasks.');
+        return;
+      }
     }
 
     // Ensure Python environment is ready before spawning process (prevents exit code 127 race condition)
