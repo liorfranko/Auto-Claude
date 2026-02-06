@@ -81,6 +81,7 @@ export function UsageIndicator() {
   const [activeProfileNeedsReauth, setActiveProfileNeedsReauth] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
+  const [isVertexAI, setIsVertexAI] = useState(false);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   /**
@@ -299,6 +300,19 @@ export function UsageIndicator() {
     };
   }, []);
 
+  // Check for Vertex AI mode on mount
+  useEffect(() => {
+    window.electronAPI.getVertexAIStatus()
+      .then((result) => {
+        if (result.success && result.data?.enabled) {
+          setIsVertexAI(true);
+        }
+      })
+      .catch((error) => {
+        console.warn('[UsageIndicator] Failed to check Vertex AI status:', error);
+      });
+  }, []);
+
   // Get formatted reset times (calculated dynamically from timestamps)
   const sessionResetTime = usage?.sessionResetTimestamp
     ? (formatTimeRemaining(usage.sessionResetTimestamp, t) ??
@@ -375,8 +389,9 @@ export function UsageIndicator() {
 
   // Show unavailable state - with better messaging based on cause
   if (!isAvailable || !usage) {
+    // Skip re-auth warning when Vertex AI is enabled (uses Google Cloud credentials)
     // Check if it's a re-auth issue (better UX than generic "not supported")
-    const needsReauth = activeProfileNeedsReauth;
+    const needsReauth = isVertexAI ? false : activeProfileNeedsReauth;
 
     return (
       <TooltipProvider delayDuration={200}>
@@ -439,8 +454,9 @@ export function UsageIndicator() {
   const limitingPercent = Math.max(sessionPercent, weeklyPercent);
 
   // Badge color based on the limiting (higher) percentage
-  // Override to red/destructive when re-auth is needed
-  const badgeColorClasses = usage.needsReauthentication
+  // Override to red/destructive when re-auth is needed (but not for Vertex AI)
+  const needsReauth = isVertexAI ? false : usage.needsReauthentication;
+  const badgeColorClasses = needsReauth
     ? 'text-red-500 bg-red-500/10 border-red-500/20'
     : getBadgeColorClasses(limitingPercent);
 
@@ -460,8 +476,8 @@ export function UsageIndicator() {
   );
 
   const maxUsage = Math.max(usage.sessionPercent, usage.weeklyPercent);
-  // Show AlertCircle when re-auth needed or high usage
-  const Icon = usage.needsReauthentication ? AlertCircle :
+  // Show AlertCircle when re-auth needed or high usage (but not for Vertex AI re-auth)
+  const Icon = needsReauth ? AlertCircle :
     maxUsage >= THRESHOLD_WARNING ? AlertCircle :
     maxUsage >= THRESHOLD_ELEVATED ? TrendingUp :
     Activity;
@@ -477,8 +493,8 @@ export function UsageIndicator() {
           onClick={handleTriggerClick}
         >
           <Icon className="h-3.5 w-3.5 flex-shrink-0" />
-          {/* Show "!" when re-auth needed, otherwise dual usage display */}
-          {usage.needsReauthentication ? (
+          {/* Show "!" when re-auth needed, otherwise dual usage display (skip for Vertex AI) */}
+          {needsReauth ? (
             <span className="text-xs font-semibold text-red-500" title={t('common:usage.needsReauth')}>
               !
             </span>
@@ -509,8 +525,8 @@ export function UsageIndicator() {
             <span className="font-semibold text-xs">{t('common:usage.usageBreakdown')}</span>
           </div>
 
-          {/* Re-auth required prompt - shown when active profile needs re-authentication */}
-          {usage.needsReauthentication ? (
+          {/* Re-auth required prompt - shown when active profile needs re-authentication (skip for Vertex AI) */}
+          {needsReauth ? (
             <div className="py-2 space-y-3">
               <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-destructive/10 border border-destructive/20">
                 <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
@@ -612,19 +628,19 @@ export function UsageIndicator() {
             onClick={handleOpenAccounts}
             className={`w-full pt-3 border-t flex items-center gap-2.5 hover:bg-muted/50 -mx-3 px-3 ${otherProfiles.length === 0 ? '-mb-3 pb-3 rounded-b-md' : 'pb-2'} transition-colors cursor-pointer group`}
           >
-            {/* Initials Avatar with warning indicator for re-auth needed */}
+            {/* Initials Avatar with warning indicator for re-auth needed (skip for Vertex AI) */}
             <div className="relative">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                usage.needsReauthentication ? 'bg-red-500/10' : 'bg-primary/10'
+                needsReauth ? 'bg-red-500/10' : 'bg-primary/10'
               }`}>
                 <span className={`text-xs font-semibold ${
-                  usage.needsReauthentication ? 'text-red-500' : 'text-primary'
+                  needsReauth ? 'text-red-500' : 'text-primary'
                 }`}>
                   {getInitials(usage.profileName)}
                 </span>
               </div>
               {/* Status dot for re-auth needed */}
-              {usage.needsReauthentication && (
+              {needsReauth && (
                 <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-background" />
               )}
             </div>
@@ -635,14 +651,14 @@ export function UsageIndicator() {
                 <span className="text-[10px] text-muted-foreground font-medium">
                   {t('common:usage.activeAccount')}
                 </span>
-                {usage.needsReauthentication && (
+                {needsReauth && (
                   <span className="text-[9px] px-1.5 py-0.5 bg-red-500/10 text-destructive rounded font-semibold">
                     {t('common:usage.needsReauth')}
                   </span>
                 )}
               </div>
               <div className={`font-medium text-xs truncate ${
-                usage.needsReauthentication ? 'text-destructive' : 'text-primary'
+                needsReauth ? 'text-destructive' : 'text-primary'
               }`}>
                 {usage.profileEmail || usage.profileName}
               </div>
