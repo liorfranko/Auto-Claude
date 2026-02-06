@@ -3,12 +3,13 @@ import { useSettingsStore } from '../../../stores/settings-store';
 
 /**
  * Hook to check if the ideation feature has valid authentication.
- * This combines two sources of authentication:
- * 1. OAuth token from source .env (checked via checkSourceToken)
- * 2. Active API profile (custom Anthropic-compatible endpoint)
+ * This combines three sources of authentication:
+ * 1. Vertex AI mode (uses Google Cloud credentials)
+ * 2. OAuth token from source .env (checked via checkSourceToken)
+ * 3. Active API profile (custom Anthropic-compatible endpoint)
  *
  * @returns { hasToken, isLoading, error, checkAuth }
- * - hasToken: true if either source OAuth token exists OR active API profile is configured
+ * - hasToken: true if Vertex AI enabled OR source OAuth token exists OR active API profile is configured
  * - isLoading: true while checking authentication status
  * - error: any error that occurred during auth check
  * - checkAuth: function to manually re-check authentication status
@@ -45,6 +46,14 @@ export function useIdeationAuth() {
       setError(null);
 
       try {
+        // Check for Vertex AI mode first (uses Google Cloud credentials)
+        const vertexResult = await window.electronAPI.getVertexAIStatus();
+        if (vertexResult.success && vertexResult.data?.enabled) {
+          setHasToken(true);
+          setIsLoading(false);
+          return;
+        }
+
         // Check for OAuth token from source .env
         const sourceTokenResult = await window.electronAPI.checkSourceToken();
         const hasSourceOAuthToken = sourceTokenResult.success && sourceTokenResult.data?.hasToken;
@@ -70,6 +79,14 @@ export function useIdeationAuth() {
     setError(null);
 
     try {
+      // Check for Vertex AI mode first (uses Google Cloud credentials)
+      const vertexResult = await window.electronAPI.getVertexAIStatus();
+      if (vertexResult.success && vertexResult.data?.enabled) {
+        setHasToken(true);
+        setIsLoading(false);
+        return;
+      }
+
       const sourceTokenResult = await window.electronAPI.checkSourceToken();
       const hasSourceOAuthToken = sourceTokenResult.success && sourceTokenResult.data?.hasToken;
 
