@@ -11,7 +11,7 @@
  * API Provider type for usage monitoring
  * Determines which usage endpoint to query and how to normalize responses
  */
-export type ApiProvider = 'anthropic' | 'zai' | 'zhipu' | 'unknown';
+export type ApiProvider = 'anthropic' | 'zai' | 'zhipu' | 'vertexai' | 'unknown';
 
 /**
  * Provider detection patterns
@@ -87,6 +87,8 @@ export function getProviderLabel(provider: ApiProvider): string {
       return 'z.ai';
     case 'zhipu':
       return 'ZHIPU AI';
+    case 'vertexai':
+      return 'Vertex AI';
     case 'unknown':
       return 'Unknown';
   }
@@ -106,6 +108,8 @@ export function getProviderBadgeColor(provider: ApiProvider): string {
       return 'bg-blue-500/10 text-blue-500 border-blue-500/20 hover:bg-blue-500/15';
     case 'zhipu':
       return 'bg-purple-500/10 text-purple-500 border-purple-500/20 hover:bg-purple-500/15';
+    case 'vertexai':
+      return 'bg-green-500/10 text-green-500 border-green-500/20 hover:bg-green-500/15';
     case 'unknown':
       return 'bg-gray-500/10 text-gray-500 border-gray-500/20 hover:bg-gray-500/15';
   }

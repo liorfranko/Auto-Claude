@@ -867,4 +867,31 @@ export function registerSettingsHandlers(
       }
     }
   );
+
+  // Get Vertex AI status from backend .env file
+  ipcMain.handle(
+    IPC_CHANNELS.SETTINGS_GET_VERTEX_AI_STATUS,
+    async (): Promise<IPCResult<{ enabled: boolean; projectId?: string; location?: string }>> => {
+      try {
+        const { isVertexAIEnabled, getVertexAIConfig } = await import('../vertex-ai-utils');
+        const enabled = isVertexAIEnabled();
+        const config = enabled ? getVertexAIConfig() : null;
+
+        return {
+          success: true,
+          data: {
+            enabled,
+            projectId: config?.projectId,
+            location: config?.location
+          }
+        };
+      } catch (error) {
+        console.error('[VERTEX_AI_STATUS] Error:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to get Vertex AI status'
+        };
+      }
+    }
+  );
 }

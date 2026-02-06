@@ -56,5 +56,11 @@ export const settingsMock = {
   onAppUpdateProgress: () => () => {},
   onAppUpdateStableDowngrade: () => () => {},
   onAppUpdateReadOnlyVolume: () => () => {},
-  onAppUpdateError: () => () => {}
+  onAppUpdateError: () => () => {},
+
+  // Vertex AI status (mock - always returns disabled in browser mode)
+  getVertexAIStatus: async () => ({
+    success: true,
+    data: { enabled: false, projectId: undefined, location: undefined }
+  })
 };

@@ -14,7 +14,7 @@
  */
 
 import { useMemo, useState, useEffect } from 'react';
-import { AlertTriangle, Key, Lock, Shield, Server, Fingerprint, ExternalLink } from 'lucide-react';
+import { AlertTriangle, Key, Lock, Shield, Server, Fingerprint, ExternalLink, Cloud } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -34,6 +34,7 @@ const PROVIDER_TRANSLATION_KEYS: Readonly<Record<ApiProvider, string>> = {
   anthropic: 'common:usage.providerAnthropic',
   zai: 'common:usage.providerZai',
   zhipu: 'common:usage.providerZhipu',
+  vertexai: 'common:usage.providerVertexAI',
   unknown: 'common:usage.providerUnknown'
 } as const;
 
@@ -56,6 +57,22 @@ export function AuthStatusIndicator() {
   // Track usage data for warning badge
   const [usage, setUsage] = useState<ClaudeUsageSnapshot | null>(null);
   const [isLoadingUsage, setIsLoadingUsage] = useState(true);
+
+  // Track Vertex AI status
+  const [vertexAIStatus, setVertexAIStatus] = useState<{ enabled: boolean; projectId?: string; location?: string } | null>(null);
+
+  // Fetch Vertex AI status on mount
+  useEffect(() => {
+    window.electronAPI.getVertexAIStatus()
+      .then((result) => {
+        if (result.success && result.data) {
+          setVertexAIStatus(result.data);
+        }
+      })
+      .catch((error) => {
+        console.warn('[AuthStatusIndicator] Failed to fetch Vertex AI status:', error);
+      });
+  }, []);
 
   // Listen for usage updates
   useEffect(() => {
@@ -102,6 +119,19 @@ export function AuthStatusIndicator() {
 
   // Compute auth status and provider detection using useMemo to avoid unnecessary re-renders
   const authStatus = useMemo(() => {
+    // Check for Vertex AI first - it takes precedence over OAuth/profiles
+    if (vertexAIStatus?.enabled) {
+      return {
+        type: 'vertexai' as const,
+        name: 'Vertex AI',
+        provider: 'vertexai' as const,
+        providerLabel: 'Google Cloud',
+        projectId: vertexAIStatus.projectId,
+        location: vertexAIStatus.location,
+        badgeColor: getProviderBadgeColor('vertexai')
+      };
+    }
+
     if (activeProfileId) {
       const activeProfile = profiles.find(p => p.id === activeProfileId);
       if (activeProfile) {
@@ -124,7 +154,7 @@ export function AuthStatusIndicator() {
     }
     // No active profile - using OAuth
     return OAUTH_FALLBACK;
-  }, [activeProfileId, profiles]);
+  }, [activeProfileId, profiles, vertexAIStatus]);
 
   // Helper function to truncate ID for display
   const truncateId = (id: string): string => {
@@ -150,11 +180,12 @@ export function AuthStatusIndicator() {
   };
 
   const isOAuth = authStatus.type === 'oauth';
-  const Icon = isOAuth ? Lock : Key;
+  const isVertexAI = authStatus.type === 'vertexai';
+  const Icon = isVertexAI ? Cloud : (isOAuth ? Lock : Key);
   // Compute once and reuse for aria-label and displayed text
   const localizedProviderLabel = getLocalizedProviderLabel(authStatus.provider);
-  // Badge label: "Claude Code" for OAuth, "API Key" for API profiles
-  const badgeLabel = isOAuth ? t('common:usage.claudeCode') : t('common:usage.apiKey');
+  // Badge label: "Vertex AI" for Vertex AI, "Claude Code" for OAuth, "API Key" for API profiles
+  const badgeLabel = isVertexAI ? t('common:usage.vertexAI', 'Vertex AI') : (isOAuth ? t('common:usage.claudeCode') : t('common:usage.apiKey'));
 
   return (
     <div className="flex items-center gap-2">
@@ -207,11 +238,13 @@ export function AuthStatusIndicator() {
                   <span className="font-semibold text-xs">{t('common:usage.authenticationDetails')}</span>
                 </div>
                 <div className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                  isOAuth
-                    ? 'bg-orange-500/15 text-orange-500'
-                    : 'bg-primary/15 text-primary'
+                  isVertexAI
+                    ? 'bg-green-500/15 text-green-500'
+                    : isOAuth
+                      ? 'bg-orange-500/15 text-orange-500'
+                      : 'bg-primary/15 text-primary'
                 }`}>
-                  {isOAuth ? t('common:usage.oauth') : t('common:usage.apiKey')}
+                  {isVertexAI ? t('common:usage.vertexAI', 'Vertex AI') : (isOAuth ? t('common:usage.oauth') : t('common:usage.apiKey'))}
                 </div>
               </div>
 
@@ -225,7 +258,7 @@ export function AuthStatusIndicator() {
               </div>
 
               {/* Claude Code subscription label for OAuth */}
-              {isOAuth && (
+              {isOAuth && !isVertexAI && (
                 <div className="flex items-center justify-between pt-2 border-t">
                   <div className="flex items-center gap-1.5 text-muted-foreground">
                     <Lock className="h-3 w-3" />
@@ -235,8 +268,34 @@ export function AuthStatusIndicator() {
                 </div>
               )}
 
+              {/* Vertex AI details */}
+              {isVertexAI && 'projectId' in authStatus && (
+                <div className="pt-2 border-t space-y-2">
+                  {/* Project ID */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Cloud className="h-3 w-3" />
+                      <span className="text-[10px]">{t('common:usage.projectId', 'Project ID')}</span>
+                    </div>
+                    <span className="font-mono text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                      {authStatus.projectId || 'N/A'}
+                    </span>
+                  </div>
+                  {/* Region */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Server className="h-3 w-3" />
+                      <span className="text-[10px]">{t('common:usage.region', 'Region')}</span>
+                    </div>
+                    <span className="font-mono text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                      {authStatus.location || 'us-east5'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Profile details for API profiles */}
-              {!isOAuth && (
+              {!isOAuth && !isVertexAI && (
                 <div className="pt-2 border-t space-y-2">
                     {/* Profile name with icon */}
                     <div className="flex items-center justify-between">

@@ -24,6 +24,9 @@ export interface SettingsAPI {
   // Claude Code onboarding status
   getClaudeCodeOnboardingStatus: () => Promise<IPCResult<{ hasCompletedOnboarding: boolean }>>;
 
+  // Vertex AI status
+  getVertexAIStatus: () => Promise<IPCResult<{ enabled: boolean; projectId?: string; location?: string }>>;
+
   // App Info
   getAppVersion: () => Promise<string>;
 
@@ -61,6 +64,10 @@ export const createSettingsAPI = (): SettingsAPI => ({
   // Claude Code onboarding status
   getClaudeCodeOnboardingStatus: (): Promise<IPCResult<{ hasCompletedOnboarding: boolean }>> =>
     ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_CLAUDE_CODE_GET_ONBOARDING_STATUS),
+
+  // Vertex AI status
+  getVertexAIStatus: (): Promise<IPCResult<{ enabled: boolean; projectId?: string; location?: string }>> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_VERTEX_AI_STATUS),
 
   // App Info
   getAppVersion: (): Promise<string> =>

@@ -391,6 +391,9 @@ export interface ElectronAPI {
   /** Check if Claude Code onboarding is complete (reads ~/.claude.json) */
   getClaudeCodeOnboardingStatus: () => Promise<IPCResult<{ hasCompletedOnboarding: boolean }>>;
 
+  /** Get Vertex AI status from backend .env file */
+  getVertexAIStatus: () => Promise<IPCResult<{ enabled: boolean; projectId?: string; location?: string }>>;
+
   // API Profile management (custom Anthropic-compatible endpoints)
   getAPIProfiles: () => Promise<IPCResult<ProfilesFile>>;
   saveAPIProfile: (profile: Omit<APIProfile, 'id' | 'createdAt' | 'updatedAt'>) => Promise<IPCResult<APIProfile>>;
