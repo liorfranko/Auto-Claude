@@ -8,6 +8,7 @@ import { join } from 'path';
 import { existsSync, readFileSync, readdirSync, mkdirSync } from 'fs';
 import type { ClaudeProfile } from '../../shared/types';
 import { getCredentialsFromKeychain } from './credential-utils';
+import { isVertexAIEnabled } from '../vertex-ai-utils';
 
 /**
  * Default Claude config directory
@@ -59,6 +60,13 @@ export async function createProfileDirectory(profileName: string): Promise<strin
  * (checks for OAuth token or config directory credential files)
  */
 export function isProfileAuthenticated(profile: ClaudeProfile): boolean {
+  // When Vertex AI is enabled, authentication uses Google Cloud credentials
+  // instead of Claude OAuth tokens, so we skip OAuth validation
+  if (isVertexAIEnabled()) {
+    console.log('[profile-utils] Vertex AI mode enabled - skipping OAuth token validation');
+    return true;
+  }
+
   // Check for direct OAuth token first (OAuth-only profiles without configDir)
   // This enables auto-switch to work with profiles that only have oauthToken set
   if (hasValidToken(profile)) {

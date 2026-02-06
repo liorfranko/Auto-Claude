@@ -52,6 +52,7 @@ import {
   expandHomePath,
   getEmailFromConfigDir
 } from './claude-profile/profile-utils';
+import { isVertexAIEnabled } from './vertex-ai-utils';
 
 /**
  * Manages Claude Code profiles for multi-account support.
@@ -712,6 +713,12 @@ export class ClaudeProfileManager {
    * @returns true if the profile can authenticate, false otherwise
    */
   hasValidAuth(profileId?: string): boolean {
+    // When Vertex AI is enabled, authentication uses Google Cloud credentials
+    // instead of Claude OAuth tokens
+    if (isVertexAIEnabled()) {
+      return true;
+    }
+
     const profile = profileId ? this.getProfile(profileId) : this.getActiveProfile();
     if (!profile) {
       return false;
